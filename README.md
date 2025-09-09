@@ -52,5 +52,5 @@ The script will:
 - tqdm
 - python-dotenv
 
-Can install dependencies with:
+Can install dependencies with:  
 pip install pandas requests tqdm python-dotenv

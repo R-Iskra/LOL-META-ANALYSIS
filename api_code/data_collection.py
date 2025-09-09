@@ -19,6 +19,10 @@ START_TIME = time.time()
 LOCK = Lock()
 MAX_REQUESTS = 100
 WINDOW_SECONDS = 120 # 2 minutes
+TOTAL_REQUESTS = 0 
+COMPLETED_REQUESTS = 0
+ETA_START = time.time() # global timer
+ESTIMATED_RUNTIME = 0.0
 
 def safe_request(url:str, params:dict=None, retries:int=3, backoff:int=2, pbar:tqdm|None=None) -> dict | list | None:
     """Wrapper for Riot API requests that handles rate limits and errors
@@ -36,7 +40,7 @@ def safe_request(url:str, params:dict=None, retries:int=3, backoff:int=2, pbar:t
         dict: JSON response from Riot API, or None if retries failed.
     """
 
-    global REQUEST_COUNTER, START_TIME
+    global REQUEST_COUNTER, START_TIME, TOTAL_REQUESTS, COMPLETED_REQUESTS, ETA_START
     
     headers = {'X-Riot-Token': api_key}
 
@@ -47,13 +51,12 @@ def safe_request(url:str, params:dict=None, retries:int=3, backoff:int=2, pbar:t
             if REQUEST_COUNTER >= MAX_REQUESTS:
                 if elapsed < WINDOW_SECONDS:
                     wait_time = int(WINDOW_SECONDS - elapsed)
-                    throttle_countdown = tqdm(total=wait_time, desc='[THROTTLE]', position=2, leave=False)
-                    for _ in range(wait_time):
-                        time.sleep(1)
-                        throttle_countdown.update(1)
-                        if pbar:
-                            pbar.update(0)
-                    throttle_countdown.close()
+                    with tqdm(total=wait_time, desc='[THROTTLE]', position=2, leave=False) as throttle_bar:
+                        for _ in range(wait_time):
+                            time.sleep(1)
+                            throttle_bar.update(1)
+                            if pbar:
+                                pbar.update(0)
 
                 # Reset counter and timestamp after waiting
                 REQUEST_COUNTER = 0
@@ -64,6 +67,16 @@ def safe_request(url:str, params:dict=None, retries:int=3, backoff:int=2, pbar:t
         response = requests.get(url, headers=headers, params=params)
 
         if response.status_code == 200:
+            COMPLETED_REQUESTS += 1
+
+            # ETA CALCULATION
+            elapsed_time = time.time() - ETA_START
+            avg_time = elapsed_time / COMPLETED_REQUESTS
+            remaining = TOTAL_REQUESTS - COMPLETED_REQUESTS
+            eta_seconds = int(avg_time * remaining)
+
+            mins, secs = divmod(eta_seconds, 60)
+            tqdm.write(f'[ETA] ~{mins}m{secs:02d}s remaining ({COMPLETED_REQUESTS}/{TOTAL_REQUESTS} requests completed)')
             return response.json()
         elif response.status_code == 429:
             # Too many requests - wait and retry
@@ -82,6 +95,35 @@ def safe_request(url:str, params:dict=None, retries:int=3, backoff:int=2, pbar:t
             print(f'Error {response.status_code}: {response.text}')
             return None
     return None
+
+def estimate_total_runtime(num_players:int, matches_per_player:int, avg_request_time:float=1.0, ladder_requests:int=1) -> float:
+    """Estimate total runtime for collecting match data including expected throttle time.
+    
+    Args:
+        num_players (int): Number of players to fetch.
+        matches_per_player (int): Number of matches per player.
+        avg_request_time (float): Average time per request in seconds (network + processing). Defaults to 1.0
+        max_requests (int): Maximum requests allowed per window (Riot API limit). Defaults to 100.
+        window_seconds (int): Duration of each rate-limit window in seconds. Defaults to 120.
+        ladder_requests (int): Number of requests used to fetch the ladder. Defaults to 1.
+        
+    Returns:
+        float: Estimated total runtime in seconds including throttle.
+    """
+
+    global MAX_REQUESTS, WINDOW_SECONDS
+
+    total_requests = ladder_requests + + num_players + (num_players * matches_per_player)
+
+    # Calculate how many full throttle windows will occur
+    full_windows = total_requests // MAX_REQUESTS
+    remaining_requests = total_requests % MAX_REQUESTS
+
+    # Total throttle seconds (only for full windows)
+    total_throttle_seconds = full_windows * WINDOW_SECONDS
+
+    total_estimated_time = total_requests * avg_request_time + total_throttle_seconds
+    return total_estimated_time
 
 def get_puuid(gameName:str, tagLine:str, region:str='americas') -> str | None:
     """Gets the puuid from riot_id and riot_tag
@@ -334,6 +376,16 @@ def collect_matches(player_puuids:list[str], matches_per_player:int=20, region:s
     Returns:
         pd.DataFrame: Cleaned match data with participants for all players.
     """
+
+    global COMPLETED_REQUESTS, ETA_START, TOTAL_REQUESTS, ESTIMATED_RUNTIME
+    COMPLETED_REQUESTS = 0
+    ETA_START = time.time()
+    # Rough estimate: 1 request for match history + N requests for player matches + N requests for match details
+    TOTAL_REQUESTS = len(player_puuids) + len(player_puuids) * (1 + matches_per_player)
+
+    ESTIMATED_RUNTIME = estimate_total_runtime(num_players=len(player_puuids), matches_per_player=matches_per_player)
+
+    print(f"[INFO] Estimated runtime (including throttling): {ESTIMATED_RUNTIME:.1f} seconds")
 
     all_matches = []
     seen_matches = set()

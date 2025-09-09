@@ -22,7 +22,7 @@ The resulting dataset can be used for player performace analysis, ranking trends
     	cd LOL-META-ANALYSIS  
 
 2. Create a virtual environment  
-    python -m venv venv
+    python -m venv venv  
     venv\Scripts\activate
 
 3. Install dependencies  
@@ -32,7 +32,7 @@ The resulting dataset can be used for player performace analysis, ranking trends
     Create .env file in project root with:  
         riot_api_key = YOUR_API_KEY_HERE
 
-# Usage
+## Usage
 Run the main data collection script:  
     python api_code/data_collection.py
 
@@ -41,11 +41,11 @@ The script will:
 - Collect recent match histories for each player
 - Clean and structure the unique match data into a Pandas DataFrame
 
-# Notes
+## Notes
 - Throttling messages will appear if the Riot API rate limit is reached.
 - Cleaned data includes match-level and participant-level stats including challenge metrics
 
-# Dependencies
+## Dependencies
 - Python 3.13.7
 - pandas
 - requests

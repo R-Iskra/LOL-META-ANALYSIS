@@ -11,7 +11,6 @@ class RiotAPIClient:
         self.max_requests = max_requests
         self.window_seconds = window_seconds
         self.request_counter = 0
-        self.start_time = time.time()
         self.lock = Lock()
 
     def safe_request(self, url:str, params:dict=None, retries:int=3, backoff:int=2) -> dict | list | None:
@@ -27,14 +26,10 @@ class RiotAPIClient:
                         print(f'\n[THROTTLE] Waiting {wait_time}s due to rate limit...')
                         time.sleep(wait_time)
                     self.request_counter = 0
-                    self.start_time = time.time()
 
                 self.request_counter += 1
 
-            # Measure only actual request time, not throttle sleep
-            request_start = time.time()
             response = requests.get(url, headers=headers, params=params)
-            request_duration = time.time() - request_start
 
             if response.status_code == 200:
                 return response.json()

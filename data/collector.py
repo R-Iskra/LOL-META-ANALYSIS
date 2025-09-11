@@ -38,9 +38,8 @@ def collect_matches(client:RiotAPIClient, player_puuids:list[str], matches_per_p
                     row = {**match_data, **participant}
                     all_matches.append(row)
 
-                # Simple progress print (no ETA)
+                print('\r' + ' ' * 150, end='', flush=True)
                 print(f'\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)}', end='', flush=True)
-        print()
 
     # Step 3: Convert to DataFrame
     return pd.DataFrame(all_matches)

@@ -7,6 +7,7 @@ import time
 from api.riot_client import RiotAPIClient
 from api.endpoints import get_ladder, get_match_history, get_match_data_from_id
 from data.cleaner import clean_match_data
+from data.collector import collect_matches
 
 def main():
     # Load environment variables
@@ -16,7 +17,7 @@ def main():
         raise EnvironmentError("❌ riot_api_key not found in .env file.")
 
     # Initialize Riot client
-    client = RiotAPIClient(max_requests=100, window_seconds=120)
+    client = RiotAPIClient()
 
     # Step 1: Fetch top 100 ladder players
     print("Fetching top 100 players from NA ladder...")
@@ -32,35 +33,12 @@ def main():
     puuids = ladder_df["puuid"].dropna().tolist()
     matches_per_player = 5
 
-    all_rows = []
-
-    # Step 3: Collect matches
-    for player_idx, puuid in enumerate(puuids):
-        match_ids = get_match_history(client, puuid, region="americas", count=matches_per_player)
-        if not match_ids:
-            continue
-
-        for match_idx, match_id in enumerate(match_ids):
-            raw_match = get_match_data_from_id(client, match_id, region="americas")
-
-            cleaned = clean_match_data(raw_match)
-            if not cleaned:
-                continue
-
-            match_data, participants = cleaned
-            for p in participants:
-                row = {**match_data, **p}
-                all_rows.append(row)
-
-            # Simple live progress print (no ETA)
-            print('\r' + ' ' * 150, end='', flush=True)
-            print(f"\rPlayer {player_idx+1}/{len(puuids)} | Match {match_idx+1}/{len(match_ids)}", end='', flush=True)
-
+    # Step 3: Collect matches using collector
+    df = collect_matches(client=client, player_puuids=puuids, matches_per_player=matches_per_player)
 
     print("\n✅ Match collection complete.")
 
     # Step 4: Convert to DataFrame
-    df = pd.DataFrame(all_rows)
     if not df.empty:
         print(f"✅ Collected {len(df)} participant rows across {df['game_id'].nunique()} matches.")
         print(df.head())

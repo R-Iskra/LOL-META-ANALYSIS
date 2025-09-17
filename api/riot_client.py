@@ -11,7 +11,7 @@ class RiotAPIClient:
         self.window_seconds = 120
         self.timestamps = []
 
-    def _respect_rate_limit(self):
+    """def _respect_rate_limit(self):
         now = time.time()
         self.timestamps = [t for t in self.timestamps if now - t < self.window_seconds]
         if len(self.timestamps) >= self.per_window:
@@ -25,11 +25,11 @@ class RiotAPIClient:
             wait_time = 1.0 - (now - recent[0])
             print(f"\n[THROTTLE] Waiting {wait_time:.2f}s due to 20 requests per second limit.")
             time.sleep(max(wait_time, 0))
-
+"""
     def request(self, url, params=None, max_attempts=5):
         attempt = 0
         while attempt < max_attempts:
-            self._respect_rate_limit()
+            #self._respect_rate_limit()
             headers = {"X-Riot-Token": self.api_key}
             try:
                 resp = requests.get(url, headers=headers, params=params, timeout=30)
@@ -39,7 +39,7 @@ class RiotAPIClient:
                 time.sleep(min(2 ** attempt, 30))
                 continue
 
-            self.timestamps.append(time.time())
+            #self.timestamps.append(time.time())
 
             if resp.status_code == 200:
                 try:

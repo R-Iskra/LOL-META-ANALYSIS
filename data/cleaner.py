@@ -9,6 +9,7 @@ def clean_match_data(match:dict) -> tuple[dict, list[dict]] | None:
     Returns:
         tuple:
             - match_data (dict) containing:
+                - match_id (str)
                 - game_id (str)
                 - game_duration (float)
                 - game_version (str)
@@ -54,57 +55,60 @@ def clean_match_data(match:dict) -> tuple[dict, list[dict]] | None:
     if not match or 'info' not in match:
         return None
     
-    info = match['info']
+    info = match["info"]
+    meta = match["metadata"]
 
     match_data = {
-        'game_id': info.get('gameId'),
-        'game_duration': info.get('gameDuration'),
-        'game_version': info.get('gameVersion'),
-        'queue_id': info.get('queueId'),
-        'map_id': info.get('mapId')
+        "match_id": meta.get("matchId"),
+        "game_id": info.get("gameId"),
+        "game_duration": info.get("gameDuration"),
+        "game_version": info.get("gameVersion"),
+        "queue_id": info.get("queueId"),
+        "map_id": info.get("mapId"),
+        "teams": {"blue": [], "red": []}
     }
 
-    participants_list = []
-
-    for p in info.get('participants', []):
-        challenges = p.get('challenges', {})
+    for p in info.get("participants", []):
+        challenges = p.get("challenges", {})
         participant_data = {
-            'puuid': p.get('puuid'),
-            'team_position': p.get('individualPosition'),
-            'champion_name': p.get('championName'),
-            'champ_level': p.get('champLevel'),
-            'kills': p.get('kills'),
-            'deaths': p.get('deaths'),
-            'assists': p.get('assists'),
-            'gold_earned': p.get('goldEarned'),
-            'total_minions_killed': p.get('totalMinionsKilled'),
-            'neutral_minions_killed': p.get('neutralMinionsKilled'),
-            'total_damage_dealt_to_champions': p.get('totalDamageDealtToChampions'),
-            'damage_self_mitigated': p.get('damageSelfMitigated'),
-            'vision_score': p.get('visionScore'),
-            'wards_placed': p.get('wardsPlaced'),
-            'items':[p.get(f'item{i}') for i in range(7)],
-            'first_blood_kill': p.get('firstBloodKill'),
-            'first_blood_assist': p.get('firstBloodAssist'),
-            'first_tower_kill': p.get('firstTowerKill'),
-            'first_tower_assist': p.get('firstTowerAssist'),
-            'turret_kills': p.get('turretKills'),
-            'challenges': {
-                'kda': challenges.get('kda'),
-                'kill_participation': challenges.get('killParticipation'),
-                'damage_per_minute': challenges.get('damagePerMinute'),
-                'damage_taken_on_team_percentage': challenges.get('damageTakenOnTeamPercentage'),
-                'vision_score_advantage_lane_opponent': challenges.get('visionScoreAdvantageLaneOpponent'),
-                'early_laning_phase_gold_exp_advantage': challenges.get('earlyLaningPhaseGoldExpAdvantage'),
-                'baron_takedowns': challenges.get('baronTakedowns'),
-                'dragon_takedowns': challenges.get('dragonTakedowns'),
-                'rift_herald_takedowns': challenges.get('riftHeraldTakedowns'),
-                'turret_takedowns': challenges.get('turretTakedowns'),
-                'control_wards_placed': challenges.get('controlWardsPlaced'),
-                'vision_score_per_minute': challenges.get('visionScorePerMinute')
+            "puuid": p.get("puuid"),
+            "team_position": p.get("individualPosition"),
+            "champion_name": p.get("championName"),
+            "champ_level": p.get("champLevel"),
+            "kills": p.get("kills"),
+            "deaths": p.get("deaths"),
+            "assists": p.get("assists"),
+            "gold_earned": p.get("goldEarned"),
+            "total_minions_killed": p.get("totalMinionsKilled"),
+            "neutral_minions_killed": p.get("neutralMinionsKilled"),
+            "total_damage_dealt_to_champions": p.get("totalDamageDealtToChampions"),
+            "damage_self_mitigated": p.get("damageSelfMitigated"),
+            "vision_score": p.get("visionScore"),
+            "wards_placed": p.get("wardsPlaced"),
+            "items": [p.get(f"item{i}") for i in range(7)],
+            "first_blood_kill": p.get("firstBloodKill"),
+            "first_blood_assist": p.get("firstBloodAssist"),
+            "first_tower_kill": p.get("firstTowerKill"),
+            "first_tower_assist": p.get("firstTowerAssist"),
+            "turret_kills": p.get("turretKills"),
+            "challenges": {
+                "kda": challenges.get("kda"),
+                "kill_participation": challenges.get("killParticipation"),
+                "damage_per_minute": challenges.get("damagePerMinute"),
+                "damage_taken_on_team_percentage": challenges.get("damageTakenOnTeamPercentage"),
+                "vision_score_advantage_lane_opponent": challenges.get("visionScoreAdvantageLaneOpponent"),
+                "early_laning_phase_gold_exp_advantage": challenges.get("earlyLaningPhaseGoldExpAdvantage"),
+                "baron_takedowns": challenges.get("baronTakedowns"),
+                "dragon_takedowns": challenges.get("dragonTakedowns"),
+                "rift_herald_takedowns": challenges.get("riftHeraldTakedowns"),
+                "turret_takedowns": challenges.get("turretTakedowns"),
+                "control_wards_placed": challenges.get("controlWardsPlaced"),
+                "vision_score_per_minute": challenges.get("visionScorePerMinute"),
             },
-            'win': p.get('win')
+            "win": p.get("win"),
         }
-        participants_list.append(participant_data)
 
-    return match_data, participants_list
+        team = "blue" if p.get("teamId") == 100 else "red"
+        match_data["teams"][team].append(participant_data)
+
+    return match_data

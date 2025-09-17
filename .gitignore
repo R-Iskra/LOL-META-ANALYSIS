@@ -4,7 +4,4 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.ipynb_checkpoints/
-Thumbs.db
 ladder_matches.csv
-test.py

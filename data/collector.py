@@ -16,9 +16,12 @@ def collect_matches(client:RiotAPIClient, player_puuids:list[str], matches_per_p
     all_matches = []
     seen_matches = set()
 
+    queue = 420     # 5x5 Ranked Solo, Summoners Rift
+    type = "ranked"
+
     for player_idx, puuid in enumerate(player_puuids):
         # Step 1: Get match IDs
-        match_ids = get_match_history(client=client, puuid=puuid, region=region, count=matches_per_player)
+        match_ids = get_match_history(client=client, puuid=puuid, region=region, count=matches_per_player, queue=queue, type=type)
         if not match_ids:
             continue
 

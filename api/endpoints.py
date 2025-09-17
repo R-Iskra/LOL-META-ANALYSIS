@@ -98,7 +98,7 @@ def get_ladder(client:RiotAPIClient, region:str='na1', top:int=250, queue:str='R
 
     return df
 
-def get_match_history(client:RiotAPIClient, puuid:str, region:str='americas', start:int=0, count:int=20) -> list[str] | None:
+def get_match_history(client:RiotAPIClient, puuid:str, region:str='americas', start:int=0, count:int=20, queue:int=420, type:str='ranked') -> list[str] | None:
     """Get X number of matches from a puuid
     
     Args:
@@ -107,6 +107,8 @@ def get_match_history(client:RiotAPIClient, puuid:str, region:str='americas', st
         region (str, optional): Region. Defaults to 'americas'.
         start (int, optional): Starting index for matches. Defaults to 0.
         count (int, optional): X number of match ids to return. Defaults to 20.
+        queue (int, optional): Filter for list of match ids. Defaults to 420, queue_id for 5x5 Ranked Solo Summoner's Rift
+        type (str, optional): Filter for list of match ids. Defaults to 'ranked'.
     
     Returns:
         list: list of match ids
@@ -115,7 +117,7 @@ def get_match_history(client:RiotAPIClient, puuid:str, region:str='americas', st
     root_url = f'https://{region}.api.riotgames.com'
     endpoint = f'/lol/match/v5/matches/by-puuid/{puuid}/ids'
     
-    params = {'start': start, 'count': count}
+    params = {'start': start, 'count': count, 'queue': queue, 'type': type}
 
     return client.request(root_url + endpoint, params=params)
 

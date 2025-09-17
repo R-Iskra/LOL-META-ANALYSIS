@@ -4,7 +4,5 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-.ipynb_checkpoints/
-Thumbs.db
-ladder_matches.csv
-test.py
+match_data.csv
+player_match_data.csv

@@ -16,7 +16,6 @@ def clean_match_data(match:dict) -> tuple[dict, list[dict]] | None:
                 - map_id (int)
             - participants (list of dicts), each dict containing:
                 - puuid (str)
-                - summoner_name (str)
                 - team_position (str)
                 - champion_name (str)
                 - champ_level (int)
@@ -71,8 +70,7 @@ def clean_match_data(match:dict) -> tuple[dict, list[dict]] | None:
         challenges = p.get('challenges', {})
         participant_data = {
             'puuid': p.get('puuid'),
-            'summoner_name': p.get('summonerName'),
-            'team_position': p.get('teamPosition'),
+            'team_position': p.get('individualPosition'),
             'champion_name': p.get('championName'),
             'champ_level': p.get('champLevel'),
             'kills': p.get('kills'),

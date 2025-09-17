@@ -1,6 +1,6 @@
 # endpoints.py
 
-from api.riot_client import RiotAPIClient
+from .riot_client import RiotAPIClient
 import pandas as pd
 
 def get_puuid(client:RiotAPIClient, gameName:str, tagLine:str, region:str='americas') -> str | None:
@@ -19,7 +19,7 @@ def get_puuid(client:RiotAPIClient, gameName:str, tagLine:str, region:str='ameri
     root_url = f'https://{region}.api.riotgames.com'
     endpoint = f'/riot/account/v1/accounts/by-riot-id/{gameName}/{tagLine}'
 
-    data = client.safe_request(root_url + endpoint)
+    data = client.request(root_url + endpoint)
 
     return data['puuid'] if data else None
 
@@ -38,7 +38,7 @@ def get_idtag_from_puuid(client:RiotAPIClient, puuid:str, region:str='americas')
     root_url = f'https://{region}.api.riotgames.com'
     endpoint = f'/riot/account/v1/accounts/by-puuid/{puuid}'
 
-    data = client.safe_request(root_url + endpoint)
+    data = client.request(root_url + endpoint)
 
     if not data:
         return None
@@ -77,7 +77,7 @@ def get_ladder(client:RiotAPIClient, region:str='na1', top:int=250, queue:str='R
     
     params = {'queue': queue}
 
-    chall_response = client.safe_request(root_url + challenger, params=params)
+    chall_response = client.request(root_url + challenger, params=params)
     if not chall_response: return pd.DataFrame()
     chall_df = pd.DataFrame(chall_response['entries']).sort_values('leaguePoints', ascending=False).reset_index(drop=True)
 
@@ -85,10 +85,10 @@ def get_ladder(client:RiotAPIClient, region:str='na1', top:int=250, queue:str='R
     m_df = pd.DataFrame()
 
     if top > 250:
-        gm_response = client.safe_request(root_url + grandmaster, params=params)
+        gm_response = client.request(root_url + grandmaster, params=params)
         if gm_response: gm_df = pd.DataFrame(gm_response['entries']).sort_values('leaguePoints', ascending=False).reset_index(drop=True)
     if top > 750:
-        m_response = client.safe_request(root_url + master, params=params)
+        m_response = client.request(root_url + master, params=params)
         if m_response: m_df = pd.DataFrame(m_response['entries']).sort_values('leaguePoints', ascending=False).reset_index(drop=True)
 
     df = pd.concat([chall_df, gm_df, m_df]).reset_index(drop=True)[:top]
@@ -117,7 +117,7 @@ def get_match_history(client:RiotAPIClient, puuid:str, region:str='americas', st
     
     params = {'start': start, 'count': count}
 
-    return client.safe_request(root_url + endpoint, params=params)
+    return client.request(root_url + endpoint, params=params)
 
 def get_match_data_from_id(client:RiotAPIClient, match_id:str, region:str='americas') -> dict | None:
     """Get match data from given match id
@@ -135,4 +135,4 @@ def get_match_data_from_id(client:RiotAPIClient, match_id:str, region:str='ameri
     root_url = f'https://{region}.api.riotgames.com'
     endpoint = f'/lol/match/v5/matches/{match_id}'
 
-    return client.safe_request(root_url + endpoint)
+    return client.request(root_url + endpoint)

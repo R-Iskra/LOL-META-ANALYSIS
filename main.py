@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import time
 from api.riot_client import RiotAPIClient
-from api.endpoints import get_ladder, get_match_history, get_match_data_from_id
-from data.cleaner import clean_match_data
+from api.endpoints import get_ladder
 from data.collector import collect_matches
 
 def main():
@@ -19,8 +18,8 @@ def main():
     # Initialize Riot client
     client = RiotAPIClient()
 
-    # Step 1: Fetch top 100 ladder players
-    print("Fetching top 100 players from NA ladder...")
+    # Step 1: Fetch top 50 ladder players
+    print("Fetching top 50 players from NA ladder...")
     ladder_df = get_ladder(client, region="na1", top=50, queue="RANKED_SOLO_5x5")
     if ladder_df.empty:
         print("❌ Failed to fetch ladder.")

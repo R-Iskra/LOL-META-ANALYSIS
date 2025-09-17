@@ -1,131 +1,66 @@
-# riot_client.py
-
-import os
-import queue
-import threading
-import uuid
-import requests
 import time
-import random
-from .token_bucket import TokenBucket
-from .rate_limiter import RateLimiter
+import os
+import requests
 
 class RiotAPIClient:
-    def __init__(self, api_key: str = None, max_workers: int = 6):
-        self.api_key = api_key or os.environ.get("riot_api_key")
-        if not self.api_key:
-            raise RuntimeError("No Riot API key provided.")
-        
+    def __init__(self):
+        self.api_key = os.environ.get('riot_api_key')
         # Strict Riot limits
-        self.bucket = TokenBucket({1: 20, 120: 100})
-        
-        # Optional rate limiter for logging/metrics/adaptive throttling
-        # Example: 50 requests per 60 seconds for some internal tracking
-        self.limiter = RateLimiter(max_requests=50, window=60)
-        self.limiter_hits = 0  # counts blocked requests by limiter
+        self.per_second = 20
+        self.per_window = 100
+        self.window_seconds = 120
+        self.timestamps = []
 
-        # Queue + worker threads
-        self.q = queue.Queue()
-        self.pending = {}
-        self.workers = []
-        self.running = True
-        self.max_workers = max_workers
-        for _ in range(max_workers):
-            t = threading.Thread(target=self._worker_loop, daemon=True)
-            t.start()
-            self.workers.append(t)
+    def _respect_rate_limit(self):
+        now = time.time()
+        self.timestamps = [t for t in self.timestamps if now - t < self.window_seconds]
+        if len(self.timestamps) >= self.per_window:
+            wait_time = self.window_seconds - (now - self.timestamps[0])
+            print(f"[THROTTLE] Waiting {wait_time:.2f}s due to 100 requests per 120 seconds limit.")
+            time.sleep(max(wait_time, 0))
+            now = time.time()
+            self.timestamps = [t for t in self.timestamps if now - t < self.window_seconds]
+        recent = [t for t in self.timestamps if now - t < 1.0]
+        if len(recent) >= self.per_second:
+            wait_time = 1.0 - (now - recent[0])
+            print(f"[THROTTLE] Waiting {wait_time:.2f}s due to 20 requests per second limit.")
+            time.sleep(max(wait_time, 0))
 
-    def _worker_loop(self):
-        while self.running:
-            try:
-                req_id, url, params, attempt, max_attempts = self.q.get(timeout=1)
-            except queue.Empty:
-                continue
-
-            # wait for strict Riot token
-            self.bucket.acquire()
-
-            # optional rate limiter
-            if not self.limiter.allow_request():
-                self.limiter_hits += 1
-                time.sleep(0.05)  # brief backoff
-                self.q.put((req_id, url, params, attempt, max_attempts))
-                self.q.task_done()
-                continue
-
+    def request(self, url, params=None, max_attempts=5):
+        attempt = 0
+        while attempt < max_attempts:
+            self._respect_rate_limit()
             headers = {"X-Riot-Token": self.api_key}
             try:
                 resp = requests.get(url, headers=headers, params=params, timeout=30)
             except Exception as e:
-                if attempt + 1 < max_attempts:
-                    backoff = min(2 ** attempt, 30)
-                    time.sleep(backoff + random.uniform(0, 0.2))
-                    self.q.put((req_id, url, params, attempt + 1, max_attempts))
-                else:
-                    self._set_response(req_id, None, error=f"network_error:{e}")
-                self.q.task_done()
+                print(f"[ERROR] Network Exception on attempt {attempt + 1}: {e}")
+                attempt += 1
+                time.sleep(min(2 ** attempt, 30))
                 continue
+
+            self.timestamps.append(time.time())
 
             if resp.status_code == 200:
                 try:
-                    result = resp.json()
-                except Exception:
-                    result = resp.text
-                self._set_response(req_id, result)
+                    return resp.json()
+                except Exception as e:
+                    print(f"[ERROR] Exception parsing JSON: {e}")
+                    return resp.text
             elif resp.status_code == 429:
                 retry_after = int(resp.headers.get("Retry-After", "1"))
+                print(f"[ERROR] 429 Too Many Requests. Retry-After: {retry_after} seconds")
                 time.sleep(retry_after)
-                if attempt + 1 < max_attempts:
-                    self.q.put((req_id, url, params, attempt + 1, max_attempts))
-                else:
-                    self._set_response(req_id, None, error="429_max_retries")
+                attempt += 1
             elif resp.status_code >= 500:
-                if attempt + 1 < max_attempts:
-                    backoff = min(2 ** attempt, 30)
-                    time.sleep(backoff + random.uniform(0, 0.2))
-                    self.q.put((req_id, url, params, attempt + 1, max_attempts))
-                else:
-                    self._set_response(req_id, None, error=f"server_error_{resp.status_code}")
+                print(f"[ERROR] Server Error {resp.status_code}: {resp.text}")
+                attempt += 1
+                time.sleep(min(2 ** attempt, 30))
+            elif resp.status_code >= 400:
+                print(f"[ERROR] Client Error {resp.status_code}: {resp.text}")
+                return None
             else:
-                self._set_response(req_id, None, error=f"{resp.status_code}:{resp.text}")
-
-            self.q.task_done()
-
-    def _set_response(self, req_id, response, error=None):
-        entry = self.pending.get(req_id)
-        if not entry:
-            return
-
-        entry["response"] = response
-        entry["error"] = error
-
-        if error:
-            print(f"[ERROR] Request {req_id}: {error}")
-
-        entry["event"].set()
-
-    def request(self, url, params=None, max_attempts=5, block=True, timeout=120.0):
-        req_id = uuid.uuid4().hex
-        ev = threading.Event()
-        self.pending[req_id] = {"event": ev, "response": None, "error": None}
-        self.q.put((req_id, url, params, 0, max_attempts))
-
-        if not block:
-            return req_id
-
-        waited = ev.wait(timeout=timeout)
-        entry = self.pending.pop(req_id, None)
-        if not waited or entry is None:
-            return None
-        if entry.get("error"):
-            return None
-        return entry.get("response")
-
-    def shutdown(self):
-        self.running = False
-        time.sleep(0.2)
-        for w in self.workers:
-            w.join(timeout=1.0)
-
-    def get_limiter_stats(self):
-        return {"limiter_hits": self.limiter_hits}
+                print(f"[ERROR] Unexpected Response {resp.status_code}: {resp.text}")
+                return None
+        print(f"[ERROR] Max attempts reached for URL: {url}")
+        return None

@@ -128,7 +128,6 @@ def get_match_data_from_id(client:RiotAPIClient, match_id:str, region:str='ameri
         client (RiotAPIClient): Client to access Riot API.
         match_id (str): match_id.
         region (str, optional): Region. Defaults to 'americas'
-        pbar (tqdm, optional): Optional progress bar to update during throttling
     
     Returns:
         dict: dictionary of uncleaned match data

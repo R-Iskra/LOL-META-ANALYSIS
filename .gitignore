@@ -1,8 +1,9 @@
+.gitignore
 venv/
 .env
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-match_data.csv
-player_match_data.csv
+raw_match_data.jsonl
+cleaned_match_data.csv

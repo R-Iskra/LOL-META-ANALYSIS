@@ -21,8 +21,8 @@ LOL-META-ANALYSIS/
 │   ├── collector.py          # Collection of matches for top players
 │   └── __init__.py
 ├── main.py                   # Main entry point for data collection
-├── match_data.csv            # Output: collected & cleaned match data, match/line (generated)
-├── player_match_data.csv     # Output: collected & cleaned match data, player/line (generated)
+├── raw_match_data.jsonl      # Output: Collected, raw match data, match/line (generated)
+├── cleaned_match_data.csv    # Output: Collected, cleaned match data, player/line (generated)
 ├── .env                      # Riot API key (see Setup)
 ├── requirements.txt          # Python dependencies
 ├── .gitignore                # Files and folders to ignore
@@ -31,8 +31,8 @@ LOL-META-ANALYSIS/
 
 ## Features
 
-- **Flexible Player & Match Selection:** Fetches the top X players from the ladder (default: top 10), and collects Y matches per player (default: 5).
-- **Data Deduplication:** Automatically skips matches already present in your CSV (by `game_id`).
+- **Flexible Player & Match Selection:** Fetches the top X players from the ladder (default: top 500), and collects Y matches per player (default: 10).
+- **Data Deduplication:** Automatically skips matches already present in your CSV (by `match_id`).
 - **Detailed Data Cleaning:** Cleans raw Riot match data into structured match-level and participant-level records, including advanced metrics and challenge stats.
 - **Robust API Handling:** Retries failed requests, gracefully handles network and rate limit errors, and logs progress.
 - **Easy CSV Output:** Combines new and existing data, deduplicates, and saves a ready-to-analyze dataset.
@@ -73,13 +73,14 @@ python main.py
 ```
 
 By default, the script will:
-- Fetch the top 10 players from the NA 'RANKED_SOLO_5x5' ladder
-- Collect 5 recent ranked matches per player
+- Fetch the top 500 players from the NA 'RANKED_SOLO_5x5' ladder
+- Collect 10 recent ranked matches per player
 - Clean and structure the match data into a Pandas DataFrame
 - Combine new and existing data, deduplicate by `match_id`
-- Save the output as `match_data.csv` and `player_match_data.csv`
+- Save raw match data to `raw_match_data.jsonl` and cleaned data to `cleaned_match_data.csv`
 
-You can modify player count and matches per player by editing the `top` and `matches_per_player` variables in `main.py`.
+You can modify player count and matches per player by editing the `top` and `matches_per_player` variables in `main.py`.    
+You can modify cleaned data in `cleaner.py`. Refer to Riot API for variable names. 
 
 ## Notes
 

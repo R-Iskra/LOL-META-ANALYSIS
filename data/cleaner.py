@@ -23,7 +23,12 @@ def load_raw_matches(jsonl_path: str) -> list[dict]:
     return matches
 
 def sort_csv(csv_path:str):
-    # Sort by gameVersion and matchId
+    """
+    Read cleaned csv, sort, and rewrite
+
+    Args:
+        csv_path (str): Path to csv file to load and write to.
+    """
     df = pd.read_csv(csv_path)
     df = df.sort_values(["gameVersion", "gameDuration", "matchId"], ascending=[False, True, False])
     df.to_csv(csv_path, header=True, index=False)

@@ -98,3 +98,4 @@ def collect_matches(
         end="",
         flush=True,
     )
+    return

@@ -22,21 +22,38 @@ def load_raw_matches(jsonl_path: str) -> list[dict]:
                 continue
     return matches
 
-def sort_csv(csv_path:str):
+def sort_csv(
+        csv_path:str, 
+        sort_values:list[str], 
+        sort_ascending:list[bool]|None = None
+        ):
     """
     Read cleaned csv, sort, and rewrite
 
     Args:
         csv_path (str): Path to csv file to load and write to.
+        sort_values (list[str]): List of string values to sort by.
+        sort_ascending (list[bool], optional): List of bools linked to values. If None, defauts to True for all columns.
     """
+    
+    if sort_ascending is None:
+        sort_ascending = [True] * len(sort_values)
+    elif len(sort_ascending) != len(sort_values):
+        raise ValueError(
+            f"Length of sort_ascending ({len(sort_ascending)}) "
+            f"does not match number of sort_values ({len(sort_values)})."
+        )
+
     df = pd.read_csv(csv_path)
-    df = df.sort_values(["gameVersion", "gameDuration", "matchId"], ascending=[False, True, False])
+    df = df.sort_values(by = sort_values, ascending = sort_ascending)
     df.to_csv(csv_path, header=True, index=False)
 
 def clean_matches(
         jsonl_path: str, 
         csv_path: str, 
-        min_duration: int|None = None
+        min_duration: int|None = None,
+        sort_values: list[str]|None = None,
+        sort_ascending: list[bool]|None = None
         ):
     """
     Clean raw JSONL matches into a player-level CSV.
@@ -45,6 +62,8 @@ def clean_matches(
         jsonl_path (str): Path to JSONL file to load.
         csv_path (str): Path to CSV file to load and store player level data.
         min_duration (int, optional): Minimum time in seconds a match must be. Defaults to None.
+        sort_values (list[str], optional): List of string values to sort by. Defaults to None.
+        sort_ascending (list[bool], optional): List of bools linked to sort_values. Defaults to None.
     """
      # Load existing keys to avoid duplicates
     if os.path.exists(csv_path):
@@ -65,15 +84,15 @@ def clean_matches(
             metadata = match["metadata"]
             info = match["info"]
 
+            if min_duration and info.get("gameDuration") < min_duration:
+                continue
+
+
             match_rows = []
             for participant in info["participants"]:
                 key = (metadata.get("matchId"), participant.get("puuid"))
                 if key in existing_keys:
                     continue
-                if min_duration and info.get("gameDuration") < min_duration:
-                    continue
-
-                
 
                 row = {
                     "matchId": metadata.get("matchId"),
@@ -86,6 +105,7 @@ def clean_matches(
                     "teamId": participant.get("teamId"),
                     "championName": participant.get("championName"),
                     "role": participant.get("individualPosition"),
+                    "teamPosition": participant.get("teamPosition"),
                     "win": participant.get("win"),
                     "kills": participant.get("kills"),
                     "deaths": participant.get("deaths"),
@@ -129,4 +149,11 @@ def clean_matches(
             print("\r" + " " * 150, end="", flush=True)
             print(f"\rProcessed line {line_idx}, total new player rows added: {total_added}", end="", flush=True)
 
-    sort_csv(csv_path=csv_path)
+    if sort_values:
+        sort_csv(
+            csv_path=csv_path,
+            sort_values=sort_values,
+            sort_ascending=sort_ascending
+            )
+    
+    return

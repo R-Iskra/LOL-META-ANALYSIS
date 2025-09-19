@@ -27,6 +27,7 @@ class RiotAPIClient:
             wait_time = 1.0 - (now - recent[0])
             print(f"\n[THROTTLE] Waiting {wait_time:.2f}s due to {self.per_second} requests per second limit.")
             time.sleep(max(wait_time, 0))
+        return
 
     def request(self, url, params=None, max_attempts=5):
         attempt = 0

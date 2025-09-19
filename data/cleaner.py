@@ -22,6 +22,11 @@ def load_raw_matches(jsonl_path: str) -> list[dict]:
                 continue
     return matches
 
+def sort_csv(csv_path:str):
+    # Sort by gameVersion and matchId
+    df = pd.read_csv(csv_path)
+    df = df.sort_values(["gameVersion", "gameDuration", "matchId"], ascending=[False, True, False])
+    df.to_csv(csv_path, header=True, index=False)
 
 def clean_matches(
         jsonl_path: str, 
@@ -119,7 +124,4 @@ def clean_matches(
             print("\r" + " " * 150, end="", flush=True)
             print(f"\rProcessed line {line_idx}, total new player rows added: {total_added}", end="", flush=True)
 
-    # Sort by gameVersion and matchId
-    df = pd.read_csv(csv_path)
-    df = df.sort_values(["gameVersion", "gameDuration", "matchId"], ascending=[False, True, False])
-    df.to_csv(csv_path, header=True, index=False)
+    sort_csv(csv_path=csv_path)

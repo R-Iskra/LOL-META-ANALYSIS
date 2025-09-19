@@ -73,7 +73,6 @@ def clean_matches(
                     "queueId": info.get("queueId"),
                     "mapId": info.get("mapId"),
                     "puuid": participant.get("puuid"),
-                    "summonerName": participant.get("summonerName"),
                     "teamId": participant.get("teamId"),
                     "championName": participant.get("championName"),
                     "role": participant.get("individualPosition"),
@@ -84,6 +83,21 @@ def clean_matches(
                     "totalDamageDealtToChampions": participant.get("totalDamageDealtToChampions"),
                     "goldEarned": participant.get("goldEarned"),
                     "champLevel": participant.get("champLevel"),
+                    "totalMinionsKilled": participant.get("totalMinionsKilled"),
+                    "neutralMinionsKilled": participant.get("neutralMinionsKilled"),
+                    "totalDamageTaken": participant.get("totalDamageTaken"),
+                    "damageSelfMitigated": participant.get("damageSelfMitigated"),
+                    "wardsPlaced": participant.get("wardsPlaced"),
+                    "wardsKilled": participant.get("wardsKilled"),
+                    "firstBloodKill": participant.get("firstBloodKill"),
+                    "firstTowerKill": participant.get("firstTowerKill"),
+                    "visionScore": participant.get("visionScore"),
+                    "totalHeal": participant.get("totalHeal"),
+                    "totalTimeCrowdControlDealt": participant.get("totalTimeCrowdControlDealt"),
+                    "largestMultiKill": participant.get("largestMultiKill"),
+                    "summoner1Id": participant.get("summoner1Id"),
+                    "summoner2Id": participant.get("summoner2Id"),
+                    "perks": participant.get("perks")
                 }
 
                 challenges = participant.get("challenges", {})
@@ -107,5 +121,5 @@ def clean_matches(
 
     # Sort by gameVersion and matchId
     df = pd.read_csv(csv_path)
-    df = df.sort_values(["gameVersion", "matchId"], ascending=[True, False])
-    df.to_csv(csv_path, header=not os.path.exists(csv_path), index=False)
+    df = df.sort_values(["gameVersion", "gameDuration", "matchId"], ascending=[False, True, False])
+    df.to_csv(csv_path, header=True, index=False)

@@ -10,7 +10,7 @@ def main():
     top = 500
     matches_per_player = 10
 
-    collect_matches(client=client, jsonl_path=jsonl_path, top=top, matches_per_player=matches_per_player)
+    # collect_matches(client=client, jsonl_path=jsonl_path, top=top, matches_per_player=matches_per_player)
 
     clean_matches(jsonl_path=jsonl_path, csv_path=csv_path)
 

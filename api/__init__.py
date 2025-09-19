@@ -1,2 +1,2 @@
 # api package initializer
-__all__ = ['endpoints', 'riot_client']
+__all__ = ["endpoints", "riot_client"]

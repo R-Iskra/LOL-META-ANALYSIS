@@ -104,3 +104,8 @@ def clean_matches(
                 total_added += len(match_rows)
             print("\r" + " " * 150, end="", flush=True)
             print(f"\rProcessed line {line_idx}, total new player rows added: {total_added}", end="", flush=True)
+
+    # Sort by gameVersion and matchId
+    df = pd.read_csv(csv_path)
+    df = df.sort_values(["gameVersion", "matchId"], ascending=[True, False])
+    df.to_csv(csv_path, header=not os.path.exists(csv_path), index=False)

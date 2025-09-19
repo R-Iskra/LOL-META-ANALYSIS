@@ -3,7 +3,7 @@
 ## Overview
 League of Legends Meta Analysis is a Python-based tool for collecting, processing, and analyzing player and match data from the Riot Games API.
 
-This project fetches top players from the 'RANKED_SOLO_5x5' queue, retrieves their recent match histories, and cleans the data into a structured format suitable for analysis with Pandas.  
+This project fetches top players from the "RANKED_SOLO_5x5" queue, retrieves their recent match histories, and cleans the data into a structured format suitable for analysis with Pandas.  
 It handles Riot API request errors, retries for failed requests, and extracts detailed participant-level statistics including performance and challenge metrics.  
 Collected data is deduplicated, skipping matches already present in your dataset, and written to a CSV for further analysis.
 
@@ -73,7 +73,7 @@ python main.py
 ```
 
 By default, the script will:
-- Fetch the top 500 players from the NA 'RANKED_SOLO_5x5' ladder
+- Fetch the top 500 players from the NA "RANKED_SOLO_5x5" ladder
 - Collect 10 recent ranked matches per player
 - Clean and structure the match data into a Pandas DataFrame
 - Combine new and existing data, deduplicate by `match_id`

@@ -1,10 +1,12 @@
 import time
 import os
 import requests
+from dotenv import load_dotenv
 
 class RiotAPIClient:
     def __init__(self):
-        self.api_key = os.environ.get('riot_api_key')
+        load_dotenv()
+        self.api_key = os.environ.get("riot_api_key")
         # Strict Riot limits
         self.per_second = 20
         self.per_window = 100
@@ -17,13 +19,13 @@ class RiotAPIClient:
         if len(self.timestamps) >= self.per_window:
             wait_time = self.window_seconds - (now - self.timestamps[0])
             self.timestamps = []
-            print(f"\n[THROTTLE] Waiting {wait_time:.2f}s due to 100 requests per 120 seconds limit.")
+            print(f"\n[THROTTLE] Waiting {wait_time:.2f}s due to {self.per_window} requests per {self.window_seconds} seconds limit.")
             time.sleep(max(wait_time, 0))
             now = time.time()
         recent = [t for t in self.timestamps if now - t < 1.0]
         if len(recent) >= self.per_second:
             wait_time = 1.0 - (now - recent[0])
-            print(f"\n[THROTTLE] Waiting {wait_time:.2f}s due to 20 requests per second limit.")
+            print(f"\n[THROTTLE] Waiting {wait_time:.2f}s due to {self.per_second} requests per second limit.")
             time.sleep(max(wait_time, 0))
 
     def request(self, url, params=None, max_attempts=5):

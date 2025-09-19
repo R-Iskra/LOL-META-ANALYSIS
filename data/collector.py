@@ -2,8 +2,8 @@
 
 import os
 import json
-from api.endpoints import get_match_history, get_match_data_from_id
 from api.riot_client import RiotAPIClient
+from api.endpoints import get_ladder, get_match_history, get_match_data_from_id
 
 
 def load_existing_match_ids(jsonl_path: str) -> set:
@@ -32,9 +32,9 @@ def load_existing_match_ids(jsonl_path: str) -> set:
 
 def collect_matches(
     client: RiotAPIClient,
-    player_puuids: list[str],
     jsonl_path: str,
-    matches_per_player: int = 20,
+    top: int = 500,
+    matches_per_player: int = 10,
     region: str = "americas",
 ):
     """
@@ -43,14 +43,16 @@ def collect_matches(
 
     Args:
         client (RiotAPIClient): Client to access Riot API.
-        player_puuids (list[str]): List of player puuids.
-        jsonl_path (str): Path to JSONL file to load and store matches.
-        matches_per_player (int, optional): Number of matches to collect per player. Defaults to 20.
+        jsonl_path (str): Path to JSONL file to load and store.
+        top (str, optional): X number of players in ladder. Defaults to 500.
+        matches_per_player (int, optional): Number of matches to collect per player. Defaults to 10.
         region (str, optional): Region for match collection. Defaults to 'americas'.
     """
     queue = 420
     type = "ranked"
     new_matches_count = 0
+
+    player_puuids = get_ladder(client=client, top=top)["puuid"].dropna().tolist()
 
     # Load existing matches once
     seen_match_ids = load_existing_match_ids(jsonl_path)

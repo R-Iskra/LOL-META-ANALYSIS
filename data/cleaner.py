@@ -1,159 +1,165 @@
-import os
 import json
-import pandas as pd
+from . import database as db
 
-
-def load_raw_matches(jsonl_path: str) -> list[dict]:
-    """
-    Load raw match data from JSONL file into a list of dicts.
-    
-    Args:
-        jsonl_path (str): Path to JSONL file to load.
-
-    Returns:
-        matches (list[dict]): list of dictionaries containing match data
-    """
-    matches = []
-    with open(jsonl_path, "r", encoding="utf-8") as f:
-        for line in f:
-            try:
-                matches.append(json.loads(line))
-            except json.JSONDecodeError:
-                continue
-    return matches
-
-def sort_csv(
-        csv_path:str, 
-        sort_values:list[str], 
-        sort_ascending:list[bool]|None = None
+def clean_matches_from_db(
+        raw_db_path: str, 
+        clean_db_path: str,
+        min_duration: int|None = None
         ):
     """
-    Read cleaned csv, sort, and rewrite
+    Clean a database containing raw match data JSONs into a clean database.
 
     Args:
-        csv_path (str): Path to csv file to load and write to.
-        sort_values (list[str]): List of string values to sort by.
-        sort_ascending (list[bool], optional): List of bools linked to values. If None, defauts to True for all columns.
+        raw_db_path (str): Path to database containing raw match data.
+        clean_db_path (str): Path to pre-existing database or database that will be created for clean match data.
+        min_duration (str, optional): Minimum time in seconds a match must last to be used for analysis. Defaults to None.
     """
-    
-    if sort_ascending is None:
-        sort_ascending = [True] * len(sort_values)
-    elif len(sort_ascending) != len(sort_values):
-        raise ValueError(
-            f"Length of sort_ascending ({len(sort_ascending)}) "
-            f"does not match number of sort_values ({len(sort_values)})."
-        )
+    raw_conn = db.connect(raw_db_path)
+    clean_conn = db.connect(clean_db_path)
 
-    df = pd.read_csv(csv_path)
-    df = df.sort_values(by = sort_values, ascending = sort_ascending)
-    df.to_csv(csv_path, header=True, index=False)
+    clean_cursor = clean_conn.cursor()
+    # make sure clean tables exist
+    db.create_clean_matches_table(clean_conn)
 
-def clean_matches(
-        jsonl_path: str, 
-        csv_path: str, 
-        min_duration: int|None = None,
-        sort_values: list[str]|None = None,
-        sort_ascending: list[bool]|None = None
-        ):
-    """
-    Clean raw JSONL matches into a player-level CSV.
+    raw_cursor = raw_conn.cursor()
+    raw_cursor.execute("SELECT match_id, data FROM raw_matches")
+    matches = raw_cursor.fetchall()
 
-    Args:
-        jsonl_path (str): Path to JSONL file to load.
-        csv_path (str): Path to CSV file to load and store player level data.
-        min_duration (int, optional): Minimum time in seconds a match must be. Defaults to None.
-        sort_values (list[str], optional): List of string values to sort by. Defaults to None.
-        sort_ascending (list[bool], optional): List of bools linked to sort_values. Defaults to None.
-    """
-     # Load existing keys to avoid duplicates
-    if os.path.exists(csv_path):
-        existing_df = pd.read_csv(csv_path, dtype={"matchId": str, "puuid": str})
-        existing_keys = set(zip(existing_df["matchId"], existing_df["puuid"]))
-    else:
-        existing_keys = set()
+    for match_id, raw_data in matches:
+        # skip if match already in clean DB
+        clean_cursor.execute("SELECT 1 FROM matches WHERE match_id = ?", (match_id,))
+        if clean_cursor.fetchone():
+            continue
 
-    total_added = 0
-
-    with open(jsonl_path, "r", encoding="utf-8") as f:
-        for line_idx, line in enumerate(f, start=1):
-            try:
-                match = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-
-            metadata = match["metadata"]
-            info = match["info"]
+        try:
+            match_json = json.loads(raw_data)
+            metadata = match_json["metadata"]
+            info = match_json["info"]
 
             if min_duration and info.get("gameDuration") < min_duration:
                 continue
 
+            # Insert match row
+            match_row = {
+                "match_id": metadata.get("matchId"),
+                "endOfGameResult": info.get("endOfGameResult"),
+                "gameDuration": info.get("gameDuration"),
+                "gameVersion": ".".join(info.get("gameVersion", "").split(".")[:2])
+            }
+            db.insert_match(clean_cursor, match_row)
 
-            match_rows = []
-            for participant in info["participants"]:
-                key = (metadata.get("matchId"), participant.get("puuid"))
-                if key in existing_keys:
-                    continue
-
-                row = {
-                    "matchId": metadata.get("matchId"),
-                    "gameId": info.get("gameId"),
-                    "gameDuration": info.get("gameDuration"),
-                    "gameVersion": ".".join(info.get("gameVersion").split(".")[:2]),
-                    "queueId": info.get("queueId"),
-                    "mapId": info.get("mapId"),
-                    "puuid": participant.get("puuid"),
-                    "teamId": participant.get("teamId"),
-                    "championName": participant.get("championName"),
-                    "role": participant.get("individualPosition"),
-                    "teamPosition": participant.get("teamPosition"),
-                    "win": participant.get("win"),
-                    "kills": participant.get("kills"),
-                    "deaths": participant.get("deaths"),
-                    "assists": participant.get("assists"),
-                    "totalDamageDealtToChampions": participant.get("totalDamageDealtToChampions"),
-                    "goldEarned": participant.get("goldEarned"),
-                    "champLevel": participant.get("champLevel"),
-                    "totalMinionsKilled": participant.get("totalMinionsKilled"),
-                    "neutralMinionsKilled": participant.get("neutralMinionsKilled"),
-                    "totalDamageTaken": participant.get("totalDamageTaken"),
-                    "damageSelfMitigated": participant.get("damageSelfMitigated"),
-                    "wardsPlaced": participant.get("wardsPlaced"),
-                    "wardsKilled": participant.get("wardsKilled"),
-                    "firstBloodKill": participant.get("firstBloodKill"),
-                    "firstTowerKill": participant.get("firstTowerKill"),
-                    "visionScore": participant.get("visionScore"),
-                    "totalHeal": participant.get("totalHeal"),
-                    "totalTimeCrowdControlDealt": participant.get("totalTimeCrowdControlDealt"),
-                    "largestMultiKill": participant.get("largestMultiKill"),
-                    "summoner1Id": participant.get("summoner1Id"),
-                    "summoner2Id": participant.get("summoner2Id"),
-                    "perks": participant.get("perks")
+            # Participants + perks
+            for p in info["participants"]:
+                participant_row = {
+                    "match_id": metadata.get("matchId"),
+                    "puuid": p.get("puuid"),
+                    "championName": p.get("championName"),
+                    "teamId": p.get("teamId"),
+                    "teamPosition": p.get("teamPosition"),
+                    "kills": p.get("kills"),
+                    "deaths": p.get("deaths"),
+                    "assists": p.get("assists"),
+                    "win": int(p.get("win", False)),
+                    "totalDamageDealt": p.get("totalDamageDealt"),
+                    "totalDamageDealtToChampions": p.get("totalDamageDealtToChampions"),
+                    "physicalDamageDealt": p.get("physicalDamageDealt"),
+                    "physicalDamageDealtToChampions": p.get("physicalDamageDealtToChampions"),
+                    "magicDamageDealt": p.get("magicDamageDealt"),
+                    "magicDamageDealtToChampions": p.get("magicDamageDealtToChampions"),
+                    "trueDamageDealt": p.get("trueDamageDealt"),
+                    "trueDamageDealtToChampions": p.get("trueDamageDealtToChampions"),
+                    "totalHeal": p.get("totalHeal"),
+                    "totalHealsOnTeammates": p.get("totalHealsOnTeammates"),
+                    "damageSelfMitigated": p.get("damageSelfMitigated"),
+                    "totalTimeCrowdControlDealt": p.get("totalTimeCrowdControlDealt"),
+                    "longestTimeSpentLiving": p.get("longestTimeSpentLiving"),
+                    "totalMinionsKilled": p.get("totalMinionsKilled"),
+                    "neutralMinionsKilled": p.get("neutralMinionsKilled"),
+                    "turretKills": p.get("turretKills"),
+                    "inhibitorKills": p.get("inhibitorKills"),
+                    "dragonKills": p.get("dragonKills"),
+                    "baronKills": p.get("baronKills"),
+                    "spell1Casts": p.get("spell1Casts"),
+                    "spell2Casts": p.get("spell2Casts"),
+                    "spell3Casts": p.get("spell3Casts"),
+                    "spell4Casts": p.get("spell4Casts"),
+                    "summoner1Id": p.get("summoner1Id"),
+                    "summoner2Id": p.get("summoner2Id"),
+                    "playerAugment1": p.get("playerAugment1"),
+                    "playerAugment2": p.get("playerAugment2"),
+                    "playerAugment3": p.get("playerAugment3"),
+                    "playerAugment4": p.get("playerAugment4")
                 }
+                db.insert_participant(clean_cursor, participant_row)
 
-                challenges = participant.get("challenges", {})
-                if challenges:
-                    row.update({
-                        "dpm": challenges.get("damagePerMinute"),
-                        "kp": challenges.get("killParticipation"),
-                        "visionScorePerMinute": challenges.get("visionScorePerMinute"),
+                # perks
+                perks = p.get("perks", {})
+                statPerks = perks.get("statPerks", {})
+                db.insert_perk_stats(clean_cursor, {
+                    "match_id": metadata.get("matchId"),
+                    "puuid": p.get("puuid"),
+                    "defense": statPerks.get("defense"),
+                    "flex": statPerks.get("flex"),
+                    "offense": statPerks.get("offense")
+                })
+
+                styles = perks.get("styles", [])
+                for idx, style in enumerate(styles):
+                    style_row = {
+                        "match_id": metadata.get("matchId"),
+                        "puuid": p.get("puuid"),
+                        "style_order": idx,
+                        "style_id": style.get("style"),
+                        "description": style.get("description")
+                    }
+                    db.insert_perk_style(clean_cursor, style_row)
+
+                    for sel in style.get("selections", []):
+                        sel_row = {
+                            "match_id": metadata.get("matchId"),
+                            "puuid": p.get("puuid"),
+                            "style_order": idx,
+                            "perk_id": sel.get("perk"),
+                            "var1": sel.get("var1"),
+                            "var2": sel.get("var2"),
+                            "var3": sel.get("var3")
+                        }
+                        db.insert_perk_selection(clean_cursor, sel_row)
+
+            # Teams
+            for t in info.get("teams", []):
+                team_row = {
+                    "match_id": metadata.get("matchId"),
+                    "team_id": t.get("teamId"),
+                    "win": int(t.get("win", False))
+                }
+                db.insert_team(clean_cursor, team_row)
+
+                for obj_name, obj_vals in t.get("objectives", {}).items():
+                    db.insert_team_objective(clean_cursor, {
+                        "match_id": metadata.get("matchId"),
+                        "team_id": t.get("teamId"),
+                        "objective_name": obj_name,
+                        "first": obj_vals.get("first"),
+                        "kills": obj_vals.get("kills")
                     })
 
-                match_rows.append(row)
-                existing_keys.add(key)
+                for ban in t.get("bans", []):
+                    db.insert_team_ban(clean_cursor, {
+                        "match_id": metadata.get("matchId"),
+                        "team_id": t.get("teamId"),
+                        "pick_turn": ban.get("pickTurn"),
+                        "champion_id": ban.get("championId")
+                    })
 
-            # Write all participants for this match immediately
-            if match_rows:
-                df = pd.DataFrame(match_rows)
-                df.to_csv(csv_path, mode="a", header=not os.path.exists(csv_path), index=False)
-                total_added += len(match_rows)
-            print("\r" + " " * 150, end="", flush=True)
-            print(f"\rProcessed line {line_idx}, total new player rows added: {total_added}", end="", flush=True)
+            # Commit per match for safety
+            clean_conn.commit()
 
-    if sort_values:
-        sort_csv(
-            csv_path=csv_path,
-            sort_values=sort_values,
-            sort_ascending=sort_ascending
-            )
-    
+        except Exception as e:
+            print(f"Error processing match {match_id}: {e}")
+            continue
+
+    raw_conn.close()
+    clean_conn.close()
+
     return

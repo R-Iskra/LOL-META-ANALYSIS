@@ -1,22 +1,19 @@
 from api.riot_client import RiotAPIClient
 from data.collector import collect_matches
-from data.cleaner import clean_matches
+from data.cleaner import clean_matches_from_db
 
 def main():
     client = RiotAPIClient()
-    jsonl_path = "raw_match_data.jsonl"
+    raw_db_path = "raw_match_data.db"
 
-    top = 1000
-    matches_per_player = 25
-    region = "americas"
+    top = 500
+    matches_per_player = 10
 
-    collect_matches(client=client, jsonl_path=jsonl_path, top=top, matches_per_player=matches_per_player, region=region)
+    collect_matches(client=client, db_path=raw_db_path, top=top, matches_per_player=matches_per_player)
 
-    csv_path = "cleaned_match_data.csv"
+    clean_db_path = "cleaned_match_data.db"
     min_duration = None
-    sort_values = ["gameVersion", "gameDuration", "matchId"]
-    sort_ascending = [False, True, False]
 
-    clean_matches(jsonl_path=jsonl_path, csv_path=csv_path, min_duration=min_duration, sort_values=sort_values, sort_ascending=sort_ascending)
+    clean_matches_from_db(raw_db_path=raw_db_path, clean_db_path=clean_db_path, min_duration=min_duration)
 
 main()

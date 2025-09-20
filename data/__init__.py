@@ -1,2 +1,2 @@
 # data package initializer
-__all__ = ["collector", "cleaner"]
+__all__ = ["collector", "cleaner", "database"]

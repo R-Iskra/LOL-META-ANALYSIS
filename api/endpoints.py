@@ -107,7 +107,7 @@ def get_match_history(client:RiotAPIClient, puuid:str, region:str="americas", st
         region (str, optional): Region. Defaults to "americas".
         start (int, optional): Starting index for matches. Defaults to 0.
         count (int, optional): X number of match ids to return. Defaults to 20.
-        queue (int, optional): Filter for list of match ids. Defaults to 420, queue_id for 5x5 Ranked Solo Summoner"s Rift
+        queue (int, optional): Filter for list of match ids. Defaults to 420, queue_id for 5x5 Ranked Solo Summoner"s Rift.
         type (str, optional): Filter for list of match ids. Defaults to "ranked".
     
     Returns:

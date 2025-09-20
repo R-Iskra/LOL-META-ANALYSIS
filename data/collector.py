@@ -3,7 +3,7 @@
 import os
 import json
 from api.riot_client import RiotAPIClient
-from . import database 
+from .database import connect, create_raw_matches_table, match_exists, insert_raw_match, delete_old_patches
 from api.endpoints import get_ladder, get_match_history, get_match_data_from_id
 
 
@@ -16,7 +16,8 @@ def collect_matches(
     ladder_region: str = "na1",
     match_queue: int = 420,
     match_region: str = "americas",
-    match_type: str = "ranked"
+    match_type: str = "ranked",
+    min_patch: str|None = None
 ):
     """
     Collect raw match data for a list of players, appending each new match as JSON to jsonl_path.
@@ -32,14 +33,29 @@ def collect_matches(
         match_queue (int, optional): Filter for list of match ids. Defaults to 420, queue_id for 5x5 Ranked Solo Summoner"s Rift.
         match_region (str, optional): Region for match collection. Defaults to "americas".
         match_type (str, optional): Type for match collection. Defaults to "ranked"
+        min_patch (str, optional): Minimum patch to keep in DB. e.g. "15.15". Defaults to None.
     """
-    conn = database.connect(db_path)
-    database.create_raw_matches_table(conn=conn)
+    conn = connect(db_path)
+    create_raw_matches_table(conn=conn)
+
+    # Delete old patches before collecting
+    if min_patch:
+        delete_old_patches(conn, min_patch)
 
     new_matches_count = 0
 
+    old_games_skipped = 0
+
     player_puuids = get_ladder(client=client, region=ladder_region, top=top, queue=ladder_queue)["puuid"].dropna().tolist()
-    print("Got players")
+
+    def parse_version(v: str) -> tuple[int, int]:
+        parts = v.split(".")
+        try:
+            return int(parts[0]), int(parts[1])
+        except (ValueError, IndexError):
+            return (0, 0)
+        
+    keep_major, keep_minor = parse_version(min_patch) if min_patch else (0, 0)
 
     for player_idx, puuid in enumerate(player_puuids):
         match_ids = get_match_history(client=client, puuid=puuid, region=match_region, count=matches_per_player, queue=match_queue, type=match_type)
@@ -47,22 +63,32 @@ def collect_matches(
             continue
 
         for match_idx, match_id in enumerate(match_ids):
-            print("\r" + " " * 150, end="", flush=True)
-            print(f"\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)} | New matches: {new_matches_count}", end="")
+            print("\r" + " " * 250, end="", flush=True)
+            print(f"\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)} | New matches: {new_matches_count} | Old games skipped: {old_games_skipped}", end="")
 
             # Skip if match_id exists in db
-            if database.match_exists(conn, match_id):
+            if match_exists(conn, match_id):
                 continue
 
             raw_match = get_match_data_from_id(client=client, match_id=match_id, region=match_region)
             if not raw_match:
                 continue
 
+            # Skip if gameVersion is below min_patch
+            if min_patch:
+                game_version = raw_match.get("info", {}).get("gameVersion", "")
+                major, minor = parse_version(game_version)
+                if (major, minor) < (keep_major, keep_minor):
+                    old_games_skipped += 1
+                    continue
+
             # Insert raw JSON into SQL
-            database.insert_raw_match(conn, raw_match)
+            insert_raw_match(conn, raw_match)
             new_matches_count += 1
 
-    print("\r" + " " * 150, end="", flush=True)
-    print(f"\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)} | New matches: {new_matches_count}", end="")
+    print("\r" + " " * 250, end="", flush=True)
+    print(f"\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)} | New matches: {new_matches_count} | Old games skipped: {old_games_skipped}", end="")
     conn.close()
-    print(f"\nFinished collecting. Total new matches: {new_matches_count}")
+    print()
+
+    return

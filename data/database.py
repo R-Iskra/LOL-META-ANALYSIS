@@ -11,7 +11,8 @@ def create_raw_matches_table(conn):
     cursor = conn.cursor()
     cursor.execute("""
                    CREATE TABLE IF NOT EXISTS raw_matches (
-                   match_id TEXT PRIMARY KEY,
+                   match_id TEXT NOT NULL PRIMARY KEY,
+                   gameVersion TEXT NOT NULL,
                    data TEXT NOT NULL
                    )
                    """)
@@ -33,15 +34,54 @@ def insert_raw_match(conn, raw_match: dict):
     """Insert raw JSON match data into the DB."""
     cursor = conn.cursor()
     match_id = raw_match.get("metadata", {}).get("matchId")
-    if not match_id:
+    game_version = raw_match.get("info", {}).get("gameVersion")
+    if not match_id or not game_version:
         return
     cursor.execute(
-        "INSERT OR IGNORE INTO raw_matches (match_id, data) VALUES (?, ?)",
-        (match_id, json.dumps(raw_match))
+        "INSERT OR IGNORE INTO raw_matches (match_id, gameVersion, data) VALUES (?, ?, ?)",
+        (match_id, game_version, json.dumps(raw_match))
     )
     conn.commit()
 
     return
+
+def delete_old_patches(conn, min_version: str):
+    """
+    Delete all raw_matches older than the given patch version.
+    Patch format is assumed like '14.18' (major.minor).
+    """
+    cursor = conn.cursor()
+
+    # Convert versions to their numeric components for comparison
+    def parse_version(v: str) -> tuple[int, int]:
+        parts = v.split(".")
+        try:
+            return int(parts[0]), int(parts[1])
+        except (ValueError, IndexError):
+            return (0, 0)  # treat bad/missing version as very old
+
+    # Get all unique versions in DB
+    cursor.execute("SELECT DISTINCT gameVersion FROM raw_matches")
+    versions = [row[0] for row in cursor.fetchall()]
+
+    keep_major, keep_minor = parse_version(min_version)
+
+    # Build list of versions to delete
+    to_delete = []
+    for v in versions:
+        major, minor = parse_version(v)
+        if (major, minor) < (keep_major, keep_minor):
+            to_delete.append(v)
+
+    if to_delete:
+        cursor.executemany(
+            "DELETE FROM raw_matches WHERE gameVersion = ?",
+            [(v,) for v in to_delete]
+        )
+        conn.commit()
+        print(f"Deleted matches from patches: {to_delete}")
+    else:
+        print("No old patches to delete.")
 
 def create_clean_matches_table(conn):
     """Ensures clean table exists"""

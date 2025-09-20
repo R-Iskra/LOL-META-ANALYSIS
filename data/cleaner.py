@@ -1,10 +1,20 @@
 import json
 from . import database as db
 
+def version_to_tuple(v: str) -> tuple[int, int]:
+    """Convert '15.14' -> (15, 14) for comparison."""
+    try:
+        parts = v.split(".")
+        return int(parts[0]), int(parts[1])
+    except Exception:
+        return (0, 0)
+
+
 def clean_matches_from_db(
         raw_db_path: str, 
         clean_db_path: str,
-        min_duration: int|None = None
+        min_duration: int|None = None,
+        min_patch: str|None = None
         ):
     """
     Clean a database containing raw match data JSONs into a clean database.
@@ -13,6 +23,7 @@ def clean_matches_from_db(
         raw_db_path (str): Path to database containing raw match data.
         clean_db_path (str): Path to pre-existing database or database that will be created for clean match data.
         min_duration (str, optional): Minimum time in seconds a match must last to be used for analysis. Defaults to None.
+        min_patch (str, optional): Minimum patch a match must be to used for analysis. Defaults to None.
     """
     raw_conn = db.connect(raw_db_path)
     clean_conn = db.connect(clean_db_path)
@@ -25,10 +36,21 @@ def clean_matches_from_db(
     raw_cursor.execute("SELECT match_id, data FROM raw_matches")
     matches = raw_cursor.fetchall()
 
+    total_matches = len(matches)
+    processed = 0
+    successful_clean = 0
+    skipped_match = 0
+
     for match_id, raw_data in matches:
+        # Show progress
+        processed += 1
+        print("\r" + " " * 120, end="", flush=True)  # clear line
+        print(f"\rProcessing match {processed}/{total_matches} | Successful cleans: {successful_clean} | Skipped matches: {skipped_match}", end="", flush=True)        
+
         # skip if match already in clean DB
         clean_cursor.execute("SELECT 1 FROM matches WHERE match_id = ?", (match_id,))
         if clean_cursor.fetchone():
+            skipped_match += 1
             continue
 
         try:
@@ -37,6 +59,12 @@ def clean_matches_from_db(
             info = match_json["info"]
 
             if min_duration and info.get("gameDuration") < min_duration:
+                skipped_match += 1
+                continue
+
+            game_version = ".".join(info.get("gameVersion", "").split(".")[:2])
+            if min_patch and version_to_tuple(game_version) < version_to_tuple(min_patch):
+                skipped_match += 1
                 continue
 
             # Insert match row
@@ -153,11 +181,15 @@ def clean_matches_from_db(
                     })
 
             # Commit per match for safety
+            successful_clean += 1
             clean_conn.commit()
 
         except Exception as e:
-            print(f"Error processing match {match_id}: {e}")
+            print(f"\nError processing match {match_id}: {e}")
             continue
+
+    print("\r" + " " * 120, end="", flush=True)  # clear line
+    print(f"\rProcessing match {processed}/{total_matches} | Successful cleans: {successful_clean} | Skipped matches: {skipped_match}", end="", flush=True)    
 
     raw_conn.close()
     clean_conn.close()

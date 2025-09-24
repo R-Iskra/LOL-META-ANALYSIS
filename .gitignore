@@ -6,3 +6,4 @@ __pycache__/
 *.pyd
 raw_match_data.db
 cleaned_match_data.db
+cleaned_match_data1200.db

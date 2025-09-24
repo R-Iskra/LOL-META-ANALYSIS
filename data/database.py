@@ -20,31 +20,6 @@ def create_raw_matches_table(conn):
     
     return
 
-def match_exists(conn, match_id: str) -> bool:
-    """Check if a match ID is already in the raw_matches table."""
-    cursor = conn.cursor()
-    try:
-        cursor.execute("SELECT 1 FROM raw_matches WHERE match_id = ?", (match_id,))
-    except sqlite3.OperationalError:
-        # Table doesn't exist yet → treat as not found
-        return False
-    return cursor.fetchone() is not None
-
-def insert_raw_match(conn, raw_match: dict):
-    """Insert raw JSON match data into the DB."""
-    cursor = conn.cursor()
-    match_id = raw_match.get("metadata", {}).get("matchId")
-    game_version = raw_match.get("info", {}).get("gameVersion")
-    if not match_id or not game_version:
-        return
-    cursor.execute(
-        "INSERT OR IGNORE INTO raw_matches (match_id, gameVersion, data) VALUES (?, ?, ?)",
-        (match_id, game_version, json.dumps(raw_match))
-    )
-    conn.commit()
-
-    return
-
 def delete_old_patches(conn, min_version: str):
     """
     Delete all raw_matches older than the given patch version.
@@ -91,6 +66,7 @@ def create_clean_matches_table(conn):
                    CREATE TABLE IF NOT EXISTS matches (
                    match_id TEXT PRIMARY KEY,
                    endOfGameResult TEXT,
+                   gameEndedInSurrender INT,
                    gameDuration INT,
                    gameVersion TEXT
                    )
@@ -230,11 +206,12 @@ def create_clean_matches_table(conn):
 # --- insert functions ---
 def insert_match(cursor, match_data: dict):
     cursor.execute("""
-        INSERT OR IGNORE INTO matches (match_id, endOfGameResult, gameDuration, gameVersion)
-        VALUES (?, ?, ?, ?)
+        INSERT OR IGNORE INTO matches (match_id, endOfGameResult, gameEndedInSurrender, gameDuration, gameVersion)
+        VALUES (?, ?, ?, ?, ?)
     """, (
         match_data["match_id"],
         match_data.get("endOfGameResult"),
+        match_data.get("gameEndedInSurrender"),
         match_data.get("gameDuration"),
         match_data.get("gameVersion")
     ))

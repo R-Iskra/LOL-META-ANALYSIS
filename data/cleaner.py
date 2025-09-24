@@ -33,24 +33,31 @@ def clean_matches_from_db(
     db.create_clean_matches_table(clean_conn)
 
     raw_cursor = raw_conn.cursor()
-    raw_cursor.execute("SELECT match_id, data FROM raw_matches")
-    matches = raw_cursor.fetchall()
 
-    total_matches = len(matches)
+    # get total match count for progress display
+    total_matches = raw_cursor.execute("SELECT COUNT(*) FROM raw_matches").fetchone()[0]
+
     processed = 0
-    successful_clean = 0
-    skipped_match = 0
+    successful_cleans = 0
+    already_cleaned = 0
+    filtered = 0
 
-    for match_id, raw_data in matches:
-        # Show progress
+    # iterate one row at a time instead of fetchall()
+    for match_id, raw_data in raw_cursor.execute("SELECT match_id, data FROM raw_matches"):
         processed += 1
         print("\r" + " " * 120, end="", flush=True)  # clear line
-        print(f"\rProcessing match {processed}/{total_matches} | Successful cleans: {successful_clean} | Skipped matches: {skipped_match}", end="", flush=True)        
+        print(
+            f"\rProcessed {processed}/{total_matches} "
+            f"| New cleans: {successful_cleans} "
+            f"| Already cleaned: {already_cleaned} "
+            f"| Filtered/skipped: {filtered}",
+            end="", flush=True
+        )
 
         # skip if match already in clean DB
         clean_cursor.execute("SELECT 1 FROM matches WHERE match_id = ?", (match_id,))
         if clean_cursor.fetchone():
-            skipped_match += 1
+            already_cleaned += 1
             continue
 
         try:
@@ -59,20 +66,26 @@ def clean_matches_from_db(
             info = match_json["info"]
 
             if min_duration and info.get("gameDuration") < min_duration:
-                skipped_match += 1
+                filtered += 1
                 continue
 
             game_version = ".".join(info.get("gameVersion", "").split(".")[:2])
             if min_patch and version_to_tuple(game_version) < version_to_tuple(min_patch):
-                skipped_match += 1
+                filtered += 1
+                continue
+
+            end_result = info.get("endOfGameResult")
+            if end_result != "GameComplete":
+                filtered += 1
                 continue
 
             # Insert match row
             match_row = {
                 "match_id": metadata.get("matchId"),
                 "endOfGameResult": info.get("endOfGameResult"),
+                "gameEndedInSurrender": int(info.get("participants", [])[0].get("gameEndedInSurrender", False)),
                 "gameDuration": info.get("gameDuration"),
-                "gameVersion": ".".join(info.get("gameVersion", "").split(".")[:2])
+                "gameVersion": game_version
             }
             db.insert_match(clean_cursor, match_row)
 
@@ -186,10 +199,17 @@ def clean_matches_from_db(
 
         except Exception as e:
             print(f"\nError processing match {match_id}: {e}")
+            filtered += 1
             continue
 
-    print("\r" + " " * 120, end="", flush=True)  # clear line
-    print(f"\rProcessing match {processed}/{total_matches} | Successful cleans: {successful_clean} | Skipped matches: {skipped_match}", end="", flush=True)    
+    # Final progress line
+    print("\r" + " " * 120, end="", flush=True)
+    print(
+        f"\rProcessed {processed}/{total_matches} "
+        f"| New cleans: {successful_cleans} "
+        f"| Already cleaned: {already_cleaned} "
+        f"| Filtered/skipped: {filtered}",
+    )
 
     raw_conn.close()
     clean_conn.close()

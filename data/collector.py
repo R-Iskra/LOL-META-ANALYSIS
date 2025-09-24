@@ -3,8 +3,38 @@
 import os
 import json
 from api.riot_client import RiotAPIClient
-from .database import connect, create_raw_matches_table, match_exists, insert_raw_match, delete_old_patches
+from .database import connect, create_raw_matches_table, delete_old_patches
 from api.endpoints import get_ladder, get_match_history, get_match_data_from_id
+
+
+def match_exists(cursor, match_id: str) -> bool:
+    """Check if a match ID is already in the raw_matches table."""
+    cursor.execute("SELECT 1 FROM raw_matches WHERE match_id = ?", (match_id,))
+    return cursor.fetchone() is not None
+
+
+def insert_raw_match(cursor, raw_match: dict):
+    """Insert raw JSON match data into the DB (commit immediately)."""
+    match_id = raw_match.get("metadata", {}).get("matchId")
+    game_version = raw_match.get("info", {}).get("gameVersion", "")
+
+    if not match_id:
+        return
+
+    cursor.execute(
+        "INSERT OR IGNORE INTO raw_matches (match_id, gameVersion, data) VALUES (?, ?, ?)",
+        (match_id, ".".join(game_version.split(".")[:2]), json.dumps(raw_match))
+    )
+    cursor.connection.commit()
+
+
+def parse_version(v: str) -> tuple[int, int]:
+    """Convert patch string like '15.14' -> (15, 14) for comparison."""
+    parts = v.split(".")
+    try:
+        return int(parts[0]), int(parts[1])
+    except (ValueError, IndexError):
+        return (0, 0)
 
 
 def collect_matches(
@@ -17,10 +47,10 @@ def collect_matches(
     match_queue: int = 420,
     match_region: str = "americas",
     match_type: str = "ranked",
-    min_patch: str|None = None
+    min_patch: str | None = None
 ):
     """
-    Collect raw match data for a list of players, appending each new match as JSON to jsonl_path.
+    Collect raw match data for a list of players, appending each new match as JSON.
     Deduplicates using match_id. Writes immediately after each successful fetch.
 
     Args:
@@ -28,53 +58,62 @@ def collect_matches(
         db_path (str): Path to database file to store raw matches.
         top (str, optional): X number of players in ladder. Defaults to 500.
         matches_per_player (int, optional): Number of matches to collect per player. Defaults to 10.
-        ladder_queue (str, optional): Queue type for matches. "RANKED_SOLO_5x5", "RANKED_FLEX_SR", or "RANKED_FLEX_TT". Defaults to "RANKED_SOLO_5x5"
-        ladder_region (str, optional): Region. Defaults to "na1"
-        match_queue (int, optional): Filter for list of match ids. Defaults to 420, queue_id for 5x5 Ranked Solo Summoner"s Rift.
+        ladder_queue (str, optional): Queue type for matches. Defaults to "RANKED_SOLO_5x5".
+        ladder_region (str, optional): Region. Defaults to "na1".
+        match_queue (int, optional): Queue filter for match IDs. Defaults to 420.
         match_region (str, optional): Region for match collection. Defaults to "americas".
-        match_type (str, optional): Type for match collection. Defaults to "ranked"
-        min_patch (str, optional): Minimum patch to keep in DB. e.g. "15.15". Defaults to None.
+        match_type (str, optional): Type for match collection. Defaults to "ranked".
+        min_patch (str, optional): Minimum patch to keep in DB. e.g. "15.15".
     """
     conn = connect(db_path)
-    create_raw_matches_table(conn=conn)
+    create_raw_matches_table(conn)
+
+    cursor = conn.cursor()
 
     # Delete old patches before collecting
     if min_patch:
         delete_old_patches(conn, min_patch)
+        keep_major, keep_minor = parse_version(min_patch)
+    else:
+        keep_major, keep_minor = (0, 0)
 
     new_matches_count = 0
-
     old_games_skipped = 0
 
-    player_puuids = get_ladder(client=client, region=ladder_region, top=top, queue=ladder_queue)["puuid"].dropna().tolist()
+    # Stream players instead of holding full list
+    ladder_df = get_ladder(client=client, region=ladder_region, top=top, queue=ladder_queue)
 
-    def parse_version(v: str) -> tuple[int, int]:
-        parts = v.split(".")
-        try:
-            return int(parts[0]), int(parts[1])
-        except (ValueError, IndexError):
-            return (0, 0)
-        
-    keep_major, keep_minor = parse_version(min_patch) if min_patch else (0, 0)
-
-    for player_idx, puuid in enumerate(player_puuids):
-        match_ids = get_match_history(client=client, puuid=puuid, region=match_region, count=matches_per_player, queue=match_queue, type=match_type)
+    for player_idx, puuid in enumerate(ladder_df["puuid"].dropna(), start=1):
+        match_ids = get_match_history(
+            client=client,
+            puuid=puuid,
+            region=match_region,
+            count=matches_per_player,
+            queue=match_queue,
+            type=match_type
+        )
         if not match_ids:
             continue
 
-        for match_idx, match_id in enumerate(match_ids):
+        for match_idx, match_id in enumerate(match_ids, start=1):
             print("\r" + " " * 250, end="", flush=True)
-            print(f"\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)} | New matches: {new_matches_count} | Old games skipped: {old_games_skipped}", end="")
+            print(
+                f"\rPlayer {player_idx}/{len(ladder_df)} | "
+                f"Match {match_idx}/{len(match_ids)} | "
+                f"New matches: {new_matches_count} | "
+                f"Old games skipped: {old_games_skipped}",
+                end=""
+            )
 
-            # Skip if match_id exists in db
-            if match_exists(conn, match_id):
+            # Skip if match_id already exists
+            if match_exists(cursor, match_id):
                 continue
 
             raw_match = get_match_data_from_id(client=client, match_id=match_id, region=match_region)
             if not raw_match:
                 continue
 
-            # Skip if gameVersion is below min_patch
+            # Skip if below min_patch
             if min_patch:
                 game_version = raw_match.get("info", {}).get("gameVersion", "")
                 major, minor = parse_version(game_version)
@@ -82,13 +121,16 @@ def collect_matches(
                     old_games_skipped += 1
                     continue
 
-            # Insert raw JSON into SQL
-            insert_raw_match(conn, raw_match)
+            insert_raw_match(cursor, raw_match)
             new_matches_count += 1
+            del raw_match  # free memory immediately
 
     print("\r" + " " * 250, end="", flush=True)
-    print(f"\rPlayer {player_idx+1}/{len(player_puuids)} | Match {match_idx+1}/{len(match_ids)} | New matches: {new_matches_count} | Old games skipped: {old_games_skipped}", end="")
-    conn.close()
-    print()
+    print(
+        f"\rFinished | Players: {len(ladder_df)} | "
+        f"New matches: {new_matches_count} | "
+        f"Old games skipped: {old_games_skipped}"
+    )
 
+    conn.close()
     return
